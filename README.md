@@ -4,7 +4,7 @@
 
 **A transformer block written from scratch in NumPy — with a live UI that shows you every tensor inside it.**
 
-[Live demo](https://transformer-viz.vercel.app) · [Source](https://github.com/AKXLR8/transformer_in_numpy) · [Issues](https://github.com/AKXLR8/transformer_in_numpy/issues)
+[Live demo](https://transformer-in-numpy-ainu.vercel.app/) · [Source](https://github.com/AKXLR8/transformer_in_numpy) · [Issues](https://github.com/AKXLR8/transformer_in_numpy/issues)
 
 </div>
 
