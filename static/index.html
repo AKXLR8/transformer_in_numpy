@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Transformer Visualizer &middot; transformer.py</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233d5afe'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='19' font-weight='700' fill='white' text-anchor='middle'%3ET%3C/text%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-text">
+        <h1>Transformer Visualizer</h1>
+        <p>Every intermediate tensor of a single block, rendered live from <code>transformer.py</code></p>
+      </div>
+    </div>
+    <div class="topbar-meta">
+      <span class="pill" id="status-pill"><span class="dot"></span><span id="status-text">Ready</span></span>
+      <span class="pill ghost" id="run-time">-- ms</span>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+
+  <div class="banner" id="error-banner" hidden>
+    <span class="banner-icon">!</span>
+    <span class="banner-text" id="error-text"></span>
+    <button class="banner-close" id="error-close" type="button">Dismiss</button>
+  </div>
+
+  <section class="card controls">
+    <div class="control-main">
+      <label class="field">
+        <span class="field-label">Input text</span>
+        <textarea id="text-input" rows="3" spellcheck="false" placeholder="Type a sentence to tokenize and run through the attention block...">akshay is running the dog is barking</textarea>
+      </label>
+      <div class="examples">
+        <span class="field-label">Examples</span>
+        <div class="example-chips" id="example-chips"></div>
+      </div>
+    </div>
+
+    <div class="control-side">
+      <div class="knobs">
+        <label class="knob">
+          <span>Embedding dim <b id="embed-dim-value">8</b></span>
+          <input type="range" id="embed-dim" min="2" max="32" step="2" value="8" />
+        </label>
+        <label class="knob">
+          <span>FFN hidden dim <b id="hidden-dim-value">32</b></span>
+          <input type="range" id="hidden-dim" min="4" max="128" step="4" value="32" />
+        </label>
+        <label class="knob">
+          <span>Max sequence length <b id="max-seq-value">32</b></span>
+          <input type="range" id="max-seq" min="4" max="64" step="4" value="32" />
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="run-btn">Run</button>
+        <button class="btn ghost" id="shuffle-btn" title="Re-run with a new random seed">Resample weights</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="pipeline" id="pipeline">
+    <div class="section-head">
+      <h2>Pipeline</h2>
+      <span class="section-note" id="pipeline-note">Each step shows the tensor shape it produces.</span>
+    </div>
+    <div class="pipeline-track" id="pipeline-track"></div>
+  </section>
+
+  <section class="grid">
+
+    <article class="card span-4" id="panel-tokenizer">
+      <div class="card-head">
+        <h2><span class="step-badge">1</span> Tokenizer</h2>
+        <span class="tag" id="vocab-tag">0 words</span>
+      </div>
+      <div class="token-strip" id="token-strip"></div>
+      <div class="split three">
+        <div>
+          <h3 class="sub">Token &rarr; ID mapping</h3>
+          <div class="scroll-box">
+            <table class="data-table" id="token-table"></table>
+          </div>
+        </div>
+        <div>
+          <h3 class="sub">Vocabulary</h3>
+          <div class="scroll-box">
+            <div class="vocab-chips" id="vocab-chips"></div>
+          </div>
+        </div>
+        <div>
+          <h3 class="sub">Input</h3>
+          <div class="scroll-box">
+            <p class="input-echo" id="input-echo"></p>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="card span-2" id="panel-embedding">
+      <div class="card-head">
+        <h2><span class="step-badge">2</span> Token embedding</h2>
+        <span class="tag" id="embedding-shape-tag">--</span>
+      </div>
+      <p class="card-desc">Learned lookup table. Each token maps to a dense vector of size <code>d</code>; rows shown are only the tokens in the current sequence.</p>
+      <div class="heatmap-wrap" id="embedding-heatmap"></div>
+      <div class="legend" id="embedding-legend"></div>
+      <h3 class="sub">Vector values</h3>
+      <div class="scroll-box">
+        <table class="data-table" id="embedding-table"></table>
+      </div>
+    </article>
+
+    <article class="card span-2" id="panel-positional">
+      <div class="card-head">
+        <h2><span class="step-badge">3</span> Positional embedding</h2>
+        <span class="tag" id="position-shape-tag">--</span>
+      </div>
+      <p class="card-desc">A separate table added element-wise to the token embeddings so the model knows word order.</p>
+      <div class="heatmap-wrap" id="position-heatmap"></div>
+      <div class="legend" id="position-legend"></div>
+      <div class="stat-row" id="position-stats"></div>
+    </article>
+
+    <article class="card span-4" id="panel-attention">
+      <div class="card-head">
+        <h2><span class="step-badge">4</span> Self-attention</h2>
+        <div class="head-tools">
+          <div class="segmented" id="attention-toggle">
+            <button class="seg active" data-view="weights">Softmax weights</button>
+            <button class="seg" data-view="scores">Pre-softmax scores</button>
+          </div>
+          <span class="tag" id="attention-shape-tag">--</span>
+        </div>
+      </div>
+      <p class="card-desc">Scaled dot-product attention over a causal mask. Rows are query positions, columns are key positions; the shaded upper triangle is masked out.</p>
+      <div class="heatmap-wrap wide" id="attention-heatmap"></div>
+      <div class="legend" id="attention-legend"></div>
+      <div class="split">
+        <div>
+          <h3 class="sub">Attention distribution per query</h3>
+          <div class="bars" id="attention-bars"></div>
+        </div>
+        <div>
+          <h3 class="sub">Top attended pairs</h3>
+          <div class="scroll-box tall">
+            <table class="data-table" id="attention-table"></table>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="card span-4" id="panel-ffn">
+      <div class="card-head">
+        <h2><span class="step-badge">5</span> Feed-forward network</h2>
+        <span class="tag" id="ffn-shape-tag">--</span>
+      </div>
+      <p class="card-desc">Two linear layers with a GELU non-linearity in between, applied per position.</p>
+      <h3 class="sub">GELU hidden activations</h3>
+      <div class="heatmap-wrap" id="ffn-hidden-heatmap"></div>
+      <div class="legend" id="ffn-hidden-legend"></div>
+      <h3 class="sub">FFN output</h3>
+      <div class="heatmap-wrap" id="ffn-output-heatmap"></div>
+      <div class="legend" id="ffn-output-legend"></div>
+    </article>
+
+    <article class="card span-2" id="panel-norm">
+      <div class="card-head">
+        <h2><span class="step-badge">6</span> Residual &amp; LayerNorm</h2>
+        <span class="tag" id="norm-shape-tag">--</span>
+      </div>
+      <p class="card-desc">The sublayer output is added back to its input, then normalised so every position has zero mean and unit variance.</p>
+      <div class="heatmap-wrap" id="norm-heatmap"></div>
+      <div class="legend" id="norm-legend"></div>
+      <div class="stat-row" id="norm-stats"></div>
+    </article>
+
+    <article class="card span-2" id="panel-params">
+      <div class="card-head">
+        <h2><span class="step-badge">+</span> Parameter summary</h2>
+        <span class="tag" id="param-tag">--</span>
+      </div>
+      <div class="split">
+        <div>
+          <h3 class="sub">Parameter counts</h3>
+          <table class="data-table" id="param-table"></table>
+        </div>
+        <div>
+          <h3 class="sub">Tensor shapes</h3>
+          <table class="data-table" id="shape-table"></table>
+        </div>
+      </div>
+    </article>
+
+  </section>
+
+  <footer class="footer">
+    <span>Built on the Python standard library &mdash; <code>server.py</code> serves <code>static/</code> and calls the real block in <code>transformer.py</code>.</span>
+  </footer>
+</main>
+
+<div id="tooltip" class="tooltip" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
