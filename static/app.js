@@ -121,18 +121,20 @@ class Heatmap {
   }
 
   layout() {
-    const width = Math.max(240, this.container.clientWidth);
-    const labelW = this.rowLabels.length ? Math.min(110, Math.max(64, width * 0.22)) : 6;
+    const available = Math.max(240, this.container.clientWidth);
+    const labelW = this.rowLabels.length ? Math.min(110, Math.max(64, available * 0.22)) : 6;
     const headH = this.colLabels.length ? 24 : 6;
+    // never shrink a cell below this - on a phone the matrix scrolls
+    // sideways instead of turning into unreadable specks
     const cell = Math.max(
-      12,
-      Math.min(46, Math.floor((width - labelW - 10) / Math.max(1, this.cols)))
+      20,
+      Math.min(46, Math.floor((available - labelW - 10) / Math.max(1, this.cols)))
     );
     return {
       labelW,
       headH,
       cell,
-      width: Math.min(width, labelW + this.cols * cell + 8),
+      width: labelW + this.cols * cell + 8,
       height: headH + this.rows * cell + 6
     };
   }
@@ -229,7 +231,7 @@ class Heatmap {
           ctx.fillRect(x, y, cell, cell);
         }
 
-        if (cell >= 34 && !isMasked) {
+        if (cell >= 24 && !isMasked) {
           const t = degenerate
             ? (this.scale === "div" ? 0.5 : 1)
             : (value - min) / (max - min || 1);
@@ -271,36 +273,62 @@ class Heatmap {
     return { r, c };
   }
 
+  showTooltip(cell, clientX, clientY) {
+    const tooltip = $("tooltip");
+    const isMasked = this.masked ? this.masked[cell.r][cell.c] : false;
+    const value = this.matrix[cell.r][cell.c];
+    const rowLabel = this.rowLabels[cell.r] !== undefined ? this.rowLabels[cell.r] : cell.r;
+    const colLabel = this.colLabels[cell.c] !== undefined ? this.colLabels[cell.c] : cell.c;
+    tooltip.innerHTML =
+      `<span class="t-title">${escapeHtml(rowLabel)} → ${escapeHtml(colLabel)}</span>\n` +
+      (isMasked ? "masked (causal)" : fmt(value, Math.max(3, this.digits)));
+    // keep it on screen near the top and bottom edges
+    tooltip.classList.toggle("below", clientY < 110);
+    tooltip.style.left = clientX + "px";
+    tooltip.style.top = clientY + "px";
+    tooltip.classList.add("show");
+  }
+
   bindEvents() {
     const tooltip = $("tooltip");
-    this.canvas.addEventListener("mousemove", (event) => {
-      const cell = this.cellAt(event.clientX, event.clientY);
+    let hideTimer = null;
+
+    const highlight = (cell) => {
       if (!cell) {
         if (this.hover) { this.hover = null; this.draw(); }
         tooltip.classList.remove("show");
-        return;
+        return false;
       }
       if (!this.hover || this.hover.r !== cell.r || this.hover.c !== cell.c) {
         this.hover = cell;
         this.draw();
       }
-      const isMasked = this.masked ? this.masked[cell.r][cell.c] : false;
-      const value = this.matrix[cell.r][cell.c];
-      const rowLabel = this.rowLabels[cell.r] !== undefined ? this.rowLabels[cell.r] : cell.r;
-      const colLabel = this.colLabels[cell.c] !== undefined ? this.colLabels[cell.c] : cell.c;
-      tooltip.innerHTML =
-        `<span class="t-title">${escapeHtml(rowLabel)} → ${escapeHtml(colLabel)}</span>\n` +
-        (isMasked ? "masked (causal)" : fmt(value, Math.max(3, this.digits)));
-      tooltip.style.left = event.clientX + "px";
-      tooltip.style.top = event.clientY + "px";
-      tooltip.classList.add("show");
+      return true;
+    };
+
+    this.canvas.addEventListener("mousemove", (event) => {
+      const cell = this.cellAt(event.clientX, event.clientY);
+      if (!highlight(cell)) return;
+      this.showTooltip(cell, event.clientX, event.clientY);
     });
 
     this.canvas.addEventListener("mouseleave", () => {
-      this.hover = null;
-      this.draw();
-      tooltip.classList.remove("show");
+      highlight(null);
     });
+
+    // phones have no hover: tapping a cell shows the value for a moment
+    this.canvas.addEventListener("touchstart", (event) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      const cell = this.cellAt(touch.clientX, touch.clientY);
+      if (!highlight(cell)) return;
+      this.showTooltip(cell, touch.clientX, touch.clientY);
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        tooltip.classList.remove("show");
+        highlight(null);
+      }, 2600);
+    }, { passive: true });
   }
 }
 

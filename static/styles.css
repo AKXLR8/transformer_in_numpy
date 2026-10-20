@@ -592,13 +592,21 @@ input[type="range"]::-moz-range-thumb {
 .split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
 .split.three { grid-template-columns: 1fr 1.4fr 1fr; }
 
+/* grid items must be allowed to shrink below their content width, otherwise
+   the wide tables inside them stretch the track and the page overflows */
+.split > *,
+.grid > * {
+  min-width: 0;
+}
+
 @media (max-width: 900px) { .split, .split.three { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- head tools / segmented control ---------- */
-.head-tools { display: flex; align-items: center; gap: 10px; }
+.head-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 .segmented {
   display: inline-flex;
+  flex-wrap: wrap;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -660,6 +668,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .tooltip.show { opacity: 1; }
+.tooltip.below { transform: translate(-50%, 24%); }
 .tooltip .t-title { color: var(--accent-text); font-weight: 600; }
 
 /* ---------- footer ---------- */
@@ -669,3 +678,391 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text-3);
   padding-top: 6px;
 }
+
+/* ==================================================================
+   mobile / iOS
+   ================================================================== */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: rgba(232, 220, 195, .12);
+}
+
+/* every interactive thing gets a comfortable tap target */
+a, button, input, textarea, select {
+  touch-action: manipulation;
+}
+
+/* ---- phones ---- */
+@media (max-width: 768px) {
+  :root {
+    --radius: 14px;
+  }
+
+  body {
+    font-size: 15px;
+  }
+
+  .topbar-inner {
+    padding: 10px 14px;
+    gap: 10px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .brand {
+    min-width: 0;
+  }
+
+  .brand-text h1 {
+    font-size: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* the tagline and the status pills share one compact row on a phone */
+  .brand-text p {
+    display: none;
+  }
+
+  .topbar-meta {
+    width: auto;
+    flex: none;
+    gap: 8px;
+  }
+
+  .pill {
+    padding: 4px 10px;
+    font-size: 11.5px;
+  }
+
+  .pill.ghost {
+    font-size: 11px;
+  }
+
+  /* the examples become one swipeable strip instead of four stacked rows */
+  .example-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+    margin-right: -14px;
+    padding-right: 14px;
+    /* fade the right edge so it reads as "swipe me" */
+    -webkit-mask-image: linear-gradient(to right, #000 88%, transparent 100%);
+    mask-image: linear-gradient(to right, #000 88%, transparent 100%);
+  }
+
+  .example-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .example-chips .chip {
+    flex: 0 0 auto;
+    padding: 8px 13px;
+    font-size: 12.5px;
+  }
+
+  .layout {
+    padding: 16px 14px calc(40px + env(safe-area-inset-bottom));
+    gap: 16px;
+  }
+
+  .card {
+    padding: 16px 14px;
+  }
+
+  .card-head {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .card-head h2 {
+    font-size: 18px;
+  }
+
+  .card-desc {
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+
+  .section-head {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .section-head h2 {
+    font-size: 17px;
+  }
+
+  /* iOS zooms in when a focused field is under 16px */
+  textarea,
+  input,
+  select,
+  button {
+    font-size: 16px;
+  }
+
+  textarea {
+    min-height: 92px;
+    padding: 12px 13px;
+  }
+
+  .chip {
+    font-size: 13px;
+    padding: 9px 14px;
+  }
+
+  .btn {
+    padding: 12px 18px;
+    flex: 1;
+    text-align: center;
+  }
+
+  .actions {
+    gap: 10px;
+  }
+
+  /* chunky, easy to drag sliders */
+  .knob {
+    font-size: 13px;
+  }
+
+  .pipeline-track {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .step {
+    padding: 12px;
+  }
+
+  .step-name {
+    font-size: 15px;
+  }
+
+  .step-desc {
+    display: none;
+  }
+
+  .token {
+    padding: 9px 14px;
+    min-width: 64px;
+  }
+
+  .token-word {
+    font-size: 14px;
+  }
+
+  .token-id,
+  .token-pos {
+    font-size: 11px;
+  }
+
+  .vocab-chip {
+    font-size: 12.5px;
+    padding: 5px 9px;
+  }
+
+  .data-table {
+    font-size: 13px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 8px 12px;
+  }
+
+  .scroll-box {
+    max-height: 260px;
+  }
+
+  .scroll-box.tall {
+    max-height: 320px;
+  }
+
+  .bar-row {
+    grid-template-columns: 62px 1fr 46px;
+  }
+
+  .stat {
+    flex: 1 1 44%;
+    min-width: 0;
+  }
+
+  .seg {
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+
+  .head-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .segmented {
+    flex: 1 1 auto;
+  }
+
+  .seg {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  .legend {
+    font-size: 11px;
+  }
+
+  /* no side padding on the heatmap wrapper, so a matrix that fits does not
+     leave a stray scrollbar behind */
+  .heatmap-wrap {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .heatmap-wrap .legend {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .footer {
+    font-size: 11.5px;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ---- small phones (iPhone SE and friends) ---- */
+@media (max-width: 380px) {
+  .layout {
+    padding-left: 11px;
+    padding-right: 11px;
+  }
+
+  .card {
+    padding: 14px 12px;
+  }
+
+  .pipeline-track {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .step-desc {
+    display: block;
+  }
+
+  .brand-text p {
+    display: none;
+  }
+}
+
+/* ---- landscape phones ---- */
+@media (max-height: 480px) and (orientation: landscape) {
+  .topbar {
+    position: static;
+  }
+}
+
+/* ---- bigger phones / small tablets ---- */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .controls {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 18px;
+  }
+}
+
+/* heatmaps scroll sideways on narrow screens instead of shrinking to
+   nothing - the matrix stays readable, you just swipe it */
+.heatmap-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.heatmap-wrap canvas {
+  max-width: none;
+}
+
+/* ---- touch devices: bigger targets, whatever the screen size ---- */
+@media (pointer: coarse) {
+  .btn {
+    padding: 12px 18px;
+  }
+
+  .chip {
+    padding: 10px 15px;
+    font-size: 13px;
+  }
+
+  .seg {
+    padding: 10px 13px;
+  }
+
+  .vocab-chip {
+    padding: 6px 10px;
+  }
+
+  .example-chips .chip {
+    padding: 10px 15px;
+  }
+
+  /* a 4px tall track is impossible to grab - keep the visible track thin
+     but make the whole control 32px tall */
+  input[type="range"] {
+    height: 32px;
+    background: transparent;
+    background-image: linear-gradient(var(--border-strong), var(--border-strong));
+    background-size: 100% 4px;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+  }
+
+  .banner-close {
+    padding: 9px 14px;
+  }
+}
+
+/* keep the tooltip usable on small screens */
+@media (max-width: 768px) {
+  .tooltip {
+    font-size: 12px;
+    padding: 8px 11px;
+    max-width: 84vw;
+    white-space: pre-wrap;
+  }
+}
+
+/* respect people who don't want motion */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+
