@@ -102,10 +102,10 @@ class Heatmap {
     if (!isFinite(min)) { min = 0; max = 1; }
     if (this.scale === "div") {
       const m = Math.max(Math.abs(min), Math.abs(max)) || 1;
-      return { min: -m, max: m };
+      return { min: -m, max: m, degenerate: false };
     }
-    if (max === min) max = min + 1;
-    return { min, max };
+    if (max === min) return { min, max, degenerate: true };
+    return { min, max, degenerate: false };
   }
 
   setMatrix(matrix, options) {
@@ -145,8 +145,8 @@ class Heatmap {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    const { min, max } = this.range();
-    this.rangeInfo = { min, max };
+    const { min, max, degenerate } = this.range();
+    this.rangeInfo = { min, max, degenerate };
 
     // column headers
     if (this.colLabels.length) {
@@ -216,7 +216,9 @@ class Heatmap {
           }
           ctx.restore();
         } else {
-          const t = (value - min) / (max - min || 1);
+          const t = degenerate
+            ? (this.scale === "div" ? 0.5 : 1)
+            : (value - min) / (max - min || 1);
           ctx.fillStyle = sampleScale(
             this.scale === "div" ? DIVERGING : SEQUENTIAL,
             t
@@ -225,7 +227,9 @@ class Heatmap {
         }
 
         if (cell >= 34 && !isMasked) {
-          const t = (value - min) / (max - min || 1);
+          const t = degenerate
+            ? (this.scale === "div" ? 0.5 : 1)
+            : (value - min) / (max - min || 1);
           const bright = this.scale === "div"
             ? Math.abs(t - 0.5) > 0.3
             : t > 0.55;
@@ -307,9 +311,10 @@ function escapeHtml(str) {
 /* legend                                                              */
 /* ------------------------------------------------------------------ */
 
-function renderLegend(containerId, min, max, scale, note) {
+function renderLegend(containerId, range, scale, note) {
   const container = $(containerId);
   container.innerHTML = "";
+  const { min, max, degenerate } = range;
   const canvas = document.createElement("canvas");
   const dpr = window.devicePixelRatio || 1;
   const w = 150;
@@ -320,18 +325,22 @@ function renderLegend(containerId, min, max, scale, note) {
   canvas.style.height = h + "px";
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const grad = ctx.createLinearGradient(0, 0, w, 0);
   const stops = scale === "div" ? DIVERGING : SEQUENTIAL;
-  for (let i = 0; i <= 10; i++) {
-    const t = i / 10;
-    grad.addColorStop(t, sampleScale(stops, t));
+  if (degenerate) {
+    ctx.fillStyle = sampleScale(stops, scale === "div" ? 0.5 : 1);
+    ctx.fillRect(0, 0, w, h);
+  } else {
+    const grad = ctx.createLinearGradient(0, 0, w, 0);
+    for (let i = 0; i <= 10; i++) {
+      grad.addColorStop(i / 10, sampleScale(stops, i / 10));
+    }
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
   }
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, w, h);
   container.appendChild(canvas);
 
   const label = document.createElement("span");
-  label.textContent = `${fmt(min, 2)}`;
+  label.textContent = fmt(min, 2);
   container.appendChild(label);
 
   const spacer = document.createElement("span");
@@ -345,7 +354,7 @@ function renderLegend(containerId, min, max, scale, note) {
   }
 
   const maxLabel = document.createElement("span");
-  maxLabel.textContent = `${fmt(max, 2)}`;
+  maxLabel.textContent = fmt(max, 2);
   container.appendChild(maxLabel);
 }
 
@@ -404,7 +413,9 @@ function renderTokens(payload) {
     strip.appendChild(chip);
   });
 
-  $("vocab-tag").textContent = `${payload.vocab_size} unique words`;
+  $("vocab-tag").textContent =
+    `${payload.vocab_size} unique words` +
+    (payload.text_truncated ? " · input cut at 500 chars" : "");
   $("input-echo").textContent = payload.text || "";
 
   const table = $("token-table");
@@ -442,7 +453,7 @@ function renderEmbedding(payload) {
     scale: "div",
     digits: 3
   });
-  renderLegend("embedding-legend", heatmap.rangeInfo.min, heatmap.rangeInfo.max, "div", "value");
+  renderLegend("embedding-legend", heatmap.rangeInfo, "div", "value");
 
   $("embedding-shape-tag").textContent =
     `(${payload.config.seq_len} × ${payload.config.embed_dim})`;
@@ -477,7 +488,7 @@ function renderPositional(payload) {
 
   $("position-shape-tag").textContent =
     `(${payload.config.seq_len} × ${payload.config.embed_dim})`;
-  renderLegend("position-legend", heatmap.rangeInfo.min, heatmap.rangeInfo.max, "div", "position value");
+  renderLegend("position-legend", heatmap.rangeInfo, "div", "position value");
 
   const stats = $("position-stats");
   const maxAbs = Math.max(
@@ -520,7 +531,7 @@ function renderAttention(payload) {
   const applyView = (name) => {
     const view = views[name];
     const range = heatmap.setMatrix(view.matrix, { scale: view.scale, digits: view.digits });
-    renderLegend("attention-legend", range.min, range.max, view.scale, view.note);
+    renderLegend("attention-legend", range, view.scale, view.note);
   };
 
   const initialView = views[state.initialView] ? state.initialView : "weights";
@@ -591,7 +602,7 @@ function renderFFN(payload) {
     scale: "div",
     digits: 3
   });
-  renderLegend("ffn-hidden-legend", hidden.rangeInfo.min, hidden.rangeInfo.max, "div", "GELU");
+  renderLegend("ffn-hidden-legend", hidden.rangeInfo, "div", "GELU");
 
   const outWrap = $("ffn-output-heatmap");
   outWrap.innerHTML = "";
@@ -602,7 +613,7 @@ function renderFFN(payload) {
     scale: "div",
     digits: 3
   });
-  renderLegend("ffn-output-legend", out.rangeInfo.min, out.rangeInfo.max, "div", "FFN output");
+  renderLegend("ffn-output-legend", out.rangeInfo, "div", "FFN output");
 
   $("ffn-shape-tag").textContent =
     `hidden (${payload.config.seq_len} × ${payload.config.hidden_dim}) → out (${payload.config.seq_len} × ${payload.config.embed_dim})`;
@@ -620,7 +631,7 @@ function renderNorm(payload) {
   });
 
   $("norm-shape-tag").textContent = `(${payload.config.seq_len} × ${payload.config.embed_dim})`;
-  renderLegend("norm-legend", heatmap.rangeInfo.min, heatmap.rangeInfo.max, "div", "normalised value");
+  renderLegend("norm-legend", heatmap.rangeInfo, "div", "normalised value");
 
   const means = payload.norm_2.map((row) => row.reduce((a, b) => a + b, 0) / row.length);
   const meanOfMeans = means.reduce((a, b) => a + b, 0) / means.length;
@@ -736,10 +747,13 @@ async function fetchPayload(params) {
   return response;
 }
 
+let requestId = 0;
+
 async function run() {
   const btn = $("run-btn");
   btn.disabled = true;
   setStatus("busy", "Running");
+  const myRequest = ++requestId;
   const params = new URLSearchParams({
     text: $("text-input").value,
     embed_dim: $("embed-dim").value,
@@ -760,17 +774,19 @@ async function run() {
     if (!response.ok) {
       throw new Error("HTTP " + response.status + ": " + (data.error || "request failed"));
     }
+    if (myRequest !== requestId) return;   // a newer request already won
     render(data);
     const elapsed = Math.round(performance.now() - started);
     $("run-time").textContent = elapsed + " ms";
     setStatus("", "Live");
     clearError();
   } catch (error) {
+    if (myRequest !== requestId) return;   // ignore a superseded failure
     console.error(error);
     setStatus("error", "Error");
     showError(error.message || "Could not reach the server. Is it still running?");
   } finally {
-    btn.disabled = false;
+    if (myRequest === requestId) btn.disabled = false;
   }
 }
 

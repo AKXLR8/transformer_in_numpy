@@ -51,7 +51,16 @@ def _as_int(params, name, default, low, high):
 
 
 def build_payload(params):
-    text = (params.get("text") or "").strip() or DEFAULT_TEXT
+    if "text" in params:
+        text = (params.get("text") or "").strip()
+        if not text:
+            raise ValueError(
+                "Enter at least one word to visualise. "
+                "The input produced no word tokens."
+            )
+    else:
+        text = DEFAULT_TEXT
+    text_truncated = len(text) > MAX_TEXT_LENGTH
     text = text[:MAX_TEXT_LENGTH]
 
     embed_dim = _as_int(params, "embed_dim", 8, 2, 64)
@@ -74,6 +83,8 @@ def handler(event, context):
 
     try:
         payload = build_payload(params)
+    except ValueError as error:
+        return _json({"error": str(error)}, 400)
     except Exception as error:  # pragma: no cover
         return _json({"error": f"Failed to run the transformer block: {error}"}, 500)
 
@@ -83,6 +94,7 @@ def handler(event, context):
             400,
         )
 
+    payload["text_truncated"] = text_truncated
     return _json(payload, 200)
 
 

@@ -1,5 +1,10 @@
 import re
+import threading
+
 import numpy as np
+
+# guards numpy's global RNG while weights are being drawn
+_WEIGHT_LOCK = threading.Lock()
 
 class Tokenizers:
     def __init__(self,text):
@@ -177,9 +182,6 @@ class TransformerPipeline:
         max_seq_len=32,
         seed=0,
     ):
-        if seed is not None:
-            np.random.seed(seed)
-
         self.text = text
         self.embed_dim = embed_dim
         self.hidden_dim = hidden_dim
@@ -194,17 +196,24 @@ class TransformerPipeline:
             for token_id in self.token_ids
         ]
 
-        self.token_embedding = Tokenembedding(
-            vocab_size=len(self.tokenizer.vocab),
-            embed_dim=embed_dim,
-        )
-        self.position_embedding = Positionembedding(
-            maxseq_len=max_seq_len,
-            embeddding_dim=embed_dim,
-        )
-        self.attention = SelfAttention(embed_dim)
-        self.ffn = FeedForward(embed_dim, hidden_dim)
-        self.layernorm = LayerNorm(embed_dim)
+        # np.random.seed is global state, and the server handles requests in
+        # threads: seed + draw every weight while holding the lock so two
+        # concurrent requests can never interleave their random streams.
+        with _WEIGHT_LOCK:
+            if seed is not None:
+                np.random.seed(seed)
+
+            self.token_embedding = Tokenembedding(
+                vocab_size=len(self.tokenizer.vocab),
+                embed_dim=embed_dim,
+            )
+            self.position_embedding = Positionembedding(
+                maxseq_len=max_seq_len,
+                embeddding_dim=embed_dim,
+            )
+            self.attention = SelfAttention(embed_dim)
+            self.ffn = FeedForward(embed_dim, hidden_dim)
+            self.layernorm = LayerNorm(embed_dim)
 
     def run(self):
         if not self.token_ids:

@@ -61,9 +61,20 @@ class VisualizerHandler(SimpleHTTPRequestHandler):
     def handle_api_run(self, parsed):
         query = parse_qs(parsed.query)
 
-        text = (query.get("text", [DEFAULT_TEXT])[0] or "").strip()
-        if not text:
+        if "text" in query:
+            text = (query.get("text", [""])[0] or "").strip()
+            if not text:
+                self.send_json(
+                    {
+                        "error": "Enter at least one word to visualise. "
+                        "The input produced no word tokens."
+                    },
+                    400,
+                )
+                return
+        else:
             text = DEFAULT_TEXT
+        text_truncated = len(text) > MAX_TEXT_LENGTH
         text = text[:MAX_TEXT_LENGTH]
 
         def as_int(name, default, low, high):
@@ -99,6 +110,7 @@ class VisualizerHandler(SimpleHTTPRequestHandler):
             )
             return
 
+        payload["text_truncated"] = text_truncated
         self.send_json(payload, 200)
 
     def send_json(self, data, status=200):
