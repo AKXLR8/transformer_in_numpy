@@ -19,13 +19,18 @@ def _find_root():
     nesting inside the bundle can vary, so probe a few candidate roots.
     """
     here = os.path.dirname(os.path.abspath(__file__))
+    cwd = os.getcwd()
     candidates = [
         here,
         os.path.dirname(here),
         os.path.dirname(os.path.dirname(here)),
         os.path.dirname(os.path.dirname(os.path.dirname(here))),
+        cwd,
+        os.path.dirname(cwd),
     ]
     for candidate in candidates:
+        if not candidate:
+            continue
         if os.path.isfile(os.path.join(candidate, "transformer.py")):
             return candidate
     return here
@@ -60,7 +65,6 @@ def build_payload(params):
             )
     else:
         text = DEFAULT_TEXT
-    text_truncated = len(text) > MAX_TEXT_LENGTH
     text = text[:MAX_TEXT_LENGTH]
 
     embed_dim = _as_int(params, "embed_dim", 8, 2, 64)
@@ -80,6 +84,9 @@ def build_payload(params):
 
 def handler(event, context):
     params = event.get("queryStringParameters") or {}
+
+    raw_text = params.get("text")
+    text_truncated = bool(raw_text) and len(raw_text.strip()) > MAX_TEXT_LENGTH
 
     try:
         payload = build_payload(params)

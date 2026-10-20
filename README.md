@@ -210,7 +210,7 @@ Free tier gives you 125k function invocations a month, 300 build minutes and 100
 python -m unittest discover -s tests -v
 ```
 
-23 tests covering the bits that are easy to get quietly wrong:
+33 tests covering the bits that are easy to get quietly wrong:
 
 - attention rows sum to 1, stay non-negative, and the causal mask is exactly zero above the diagonal
 - residuals, LayerNorm, GELU and the FFN match independent re-implementations
@@ -219,6 +219,7 @@ python -m unittest discover -s tests -v
 - the same seed always gives the same weights, different seeds don't
 - edge cases: empty input, whitespace, punctuation only, one word, 200 words, unicode, emoji, `d=2`, `d=64`, `hidden=256`
 - the JSON contract the UI depends on
+- the Netlify function itself: status codes for blank/wordless input, parameter clamping, the 500-char cap, and a key-by-key check that every field `app.js` reads is actually in the response
 
 ---
 
@@ -250,7 +251,9 @@ static/
   index.html                   the page
   styles.css                   pitch-black theme, cream accent, mixed serif/sans
   app.js                       rendering, heatmaps, interaction (775 lines)
-tests/test_pipeline.py         23 unit tests (138 lines)
+tests/
+  test_pipeline.py           math invariants + edge cases (138 lines)
+  test_function.py           the Netlify function + JSON contract (95 lines)
 ```
 
 The front end is deliberately dependency-free — no React, no build step, no `node_modules`. It's plain HTML, CSS and one JavaScript file. Clone the repo, run the server, done.
