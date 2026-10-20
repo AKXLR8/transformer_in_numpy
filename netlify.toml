@@ -4,10 +4,7 @@
 
 [functions]
   python_version = "3.12"
-
-# make sure the shared numpy implementation travels with the function bundle
-[[functions]]
-  function = "run"
+  # make sure the shared numpy implementation travels with the function bundle
   included_files = ["transformer.py"]
 
 # the front end calls /api/run; forward it to the function
