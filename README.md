@@ -4,7 +4,7 @@
 
 **A transformer block written from scratch in NumPy — with a live UI that shows you every tensor inside it.**
 
-[Live demo](https://transformer-viz.netlify.app) · [Source](https://github.com/AKXLR8/transformer_in_numpy) · [Issues](https://github.com/AKXLR8/transformer_in_numpy/issues)
+[Live demo](https://transformer-viz.vercel.app) · [Source](https://github.com/AKXLR8/transformer_in_numpy) · [Issues](https://github.com/AKXLR8/transformer_in_numpy/issues)
 
 </div>
 
@@ -21,7 +21,7 @@ So this repo has two halves:
 
 Type a sentence, hit run, and watch the numbers move. Nothing is mocked up — the heatmaps are the actual NumPy arrays coming out of the actual code.
 
-![python](https://img.shields.io/badge/python-3.9%2B-blue) ![numpy](https://img.shields.io/badge/numpy-only-3B5BDB) ![deploy](https://img.shields.io/badge/netlify-00C7B7) ![deps](https://img.shields.io/badge/frontend-zero%20dependencies-8B5CF6)
+![python](https://img.shields.io/badge/python-3.9%2B-blue) ![numpy](https://img.shields.io/badge/numpy-only-3B5BDB) ![deploy](https://img.shields.io/badge/vercel-000000) ![deps](https://img.shields.io/badge/frontend-zero%20dependencies-8B5CF6)
 
 ---
 
@@ -61,8 +61,8 @@ python server.py --host 0.0.0.0   # expose it on your LAN
 flowchart LR
     U["🖥️ Browser<br/><i>static/index.html</i>"] -->|"fetch /api/run<br/>?text=...&amp;embed_dim=8"| S{"Where is it running?"}
     S -->|"local dev"| L["server.py<br/><i>http.server + ThreadingHTTPServer</i>"]
-    S -->|"Netlify"| F["netlify/functions/run.py<br/><i>AWS Lambda + numpy</i>"]
-    L --> P["TransformerPipeline.run()"]
+    S -->|"Vercel"| F["api/run.py<br/><i>Python function on Vercel</i>"]
+    L --> P["transformer_api.handle_params()"]
     F --> P
     P --> T["transformer.py<br/><i>the numpy block</i>"]
     T --> J["📦 JSON payload<br/><i>every intermediate tensor</i>"]
@@ -123,7 +123,7 @@ Everything re-runs live as you type. Hover any heatmap cell for its exact value.
 
 ## The API
 
-One endpoint, used by both the local server and the Netlify function:
+One endpoint, used by both the local server and the deployed function:
 
 ```
 GET /api/run?text=hello%20world&embed_dim=8&hidden_dim=32&max_seq_len=32&seed=0
@@ -160,47 +160,66 @@ The JSON response carries every intermediate tensor, so you can poke at it in th
 
 ---
 
-## Deploying it free on Netlify
+## Deploying it free on Vercel
 
-The UI is static, but the maths needs Python — so it's a Netlify Function sitting behind a redirect. `netlify.toml` wires it up:
+The UI is static, the maths needs Python — so the API lives in `api/run.py`, a
+Vercel Python function, and the front end is served as static files. Vercel
+maps `api/run.py` to `/api/run` automatically, which is the exact path the
+front end already calls.
 
-```toml
-[build]
-  publish = "static"
-  functions = "netlify/functions"
-
-[[functions]]
-  function = "run"
-  included_files = ["transformer.py"]
-
-[[redirects]]
-  from = "/api/run"
-  to = "/.netlify/functions/run"
-  status = 200
+```json title="vercel.json"
+{
+  "outputDirectory": "static",
+  "functions": {
+    "api/run.py": { "excludeFiles": "{tests/**,venv/**,static/**}" }
+  }
+}
 ```
 
 **To deploy:**
 
-1. Go to [app.netlify.com](https://app.netlify.com) → **Add new site** → **Import an existing project**
-2. Pick GitHub → authorise → choose `AKXLR8/transformer_in_numpy`
-3. Netlify reads `netlify.toml` on its own, so there's nothing to configure
-4. Hit **Deploy site** and wait a minute or two — the first build installs numpy into the Lambda bundle
-5. Every `git push` to `main` redeploys automatically
+1. Go to [vercel.com/new](https://vercel.com/new) → **Import** the repo (`AKXLR8/transformer_in_numpy`)
+2. Vercel reads `vercel.json` on its own — leave the framework preset on **Other**, build command empty, output directory `static`
+3. **Deploy**. The first build installs numpy for the function, so give it a minute
+4. Your URL: `https://<your-project>.vercel.app`
 
-The front end calls `/api/run` in both worlds; Netlify rewrites it to the function. One code path, no drift.
+Every push to `main` redeploys automatically.
 
-> **Don't drag-and-drop the `static/` folder.** That ships the UI without the Python function and the app will just show a red error banner. The function is the whole point.
+> **No FastAPI, no Flask, no extra dependencies.** The function is a plain
+> `BaseHTTPRequestHandler` subclass, so the only thing Vercel has to install is
+> numpy. `requirements.txt` is the whole dependency list.
 
 With the CLI instead:
 
 ```bash
-npm i -g netlify-cli
-netlify login
-netlify init          # picks up the existing netlify.toml
-netlify deploy --prod
+npm i -g vercel
+vercel            # preview deploy
+vercel --prod     # production
 ```
 
-Free tier gives you 125k function invocations a month, 300 build minutes and 100 GB of bandwidth. Plenty for a demo. The only real quirk is Lambda cold starts — the first request after a quiet minute takes about a second.
+**How it hangs together**
+
+| Piece | Where it lives |
+|---|---|
+| `api/run.py` | the Vercel function, serves `/api/run` |
+| `transformer_api.py` | shared request handling used by *both* entry points |
+| `static/` | the UI, served as static files |
+| `transformer.py` | the numpy block — bundled with the function, imported by it |
+
+Both the local server and the deployed function call the same
+`transformer_api.handle_params()`, so they can't drift apart. (An earlier
+version had two copies of the request logic and they *did* drift — one of them
+threw a `NameError` on every request in production while the local one was
+fine. Now there's only one copy.)
+
+**One heads-up:** Netlify was the original plan, but Netlify Functions only
+support TypeScript, JavaScript and Go — there's no Python runtime there at
+all. Vercel runs Python natively, so the block stays in Python, which is the
+whole point.
+
+Free tier: 100 GB bandwidth, 1000 build minutes, and the Hobby plan's
+serverless function allowance is plenty for a demo. Cold starts are around a
+second.
 
 ---
 
@@ -210,7 +229,7 @@ Free tier gives you 125k function invocations a month, 300 build minutes and 100
 python -m unittest discover -s tests -v
 ```
 
-33 tests covering the bits that are easy to get quietly wrong:
+36 tests covering the bits that are easy to get quietly wrong:
 
 - attention rows sum to 1, stay non-negative, and the causal mask is exactly zero above the diagonal
 - residuals, LayerNorm, GELU and the FFN match independent re-implementations
@@ -219,7 +238,7 @@ python -m unittest discover -s tests -v
 - the same seed always gives the same weights, different seeds don't
 - edge cases: empty input, whitespace, punctuation only, one word, 200 words, unicode, emoji, `d=2`, `d=64`, `hidden=256`
 - the JSON contract the UI depends on
-- the Netlify function itself: status codes for blank/wordless input, parameter clamping, the 500-char cap, and a key-by-key check that every field `app.js` reads is actually in the response
+- the deployed API: status codes for blank/wordless input, parameter clamping, the 500-char cap, and a key-by-key check that every field `app.js` reads is actually in the response
 
 ---
 
@@ -243,17 +262,19 @@ Things that might trip you up if you don't know about them:
 
 ```
 transformer.py                 the block, in pure NumPy (342 lines)
-server.py                      stdlib HTTP server for local dev (126 lines)
-netlify/functions/run.py       the same API as a Netlify Function (87 lines)
-netlify.toml                   build config + /api/run redirect
+transformer_api.py             shared request handling (78 lines)
+server.py                      stdlib HTTP server for local dev (117 lines)
+api/run.py                     the deployed function: /api/run (50 lines)
+vercel.json                    output dir + function config
 requirements.txt               numpy
+.python-version                3.12
 static/
   index.html                   the page
   styles.css                   pitch-black theme, cream accent, mixed serif/sans
-  app.js                       rendering, heatmaps, interaction (775 lines)
+  app.js                       rendering, heatmaps, interaction (777 lines)
 tests/
-  test_pipeline.py           math invariants + edge cases (138 lines)
-  test_function.py           the Netlify function + JSON contract (95 lines)
+  test_pipeline.py             math invariants + edge cases (138 lines)
+  test_function.py             the API + JSON contract (165 lines)
 ```
 
 The front end is deliberately dependency-free — no React, no build step, no `node_modules`. It's plain HTML, CSS and one JavaScript file. Clone the repo, run the server, done.

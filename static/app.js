@@ -12,11 +12,14 @@ const $ = (id) => document.getElementById(id);
 const state = {
   payload: null,
   seed: 0,
-  heatmaps: [],
-  apiEndpoint: "/api/run"
+  heatmaps: []
 };
 
-const NETLIFY_ENDPOINT = "/.netlify/functions/run";
+// guards against out of order responses when several requests overlap
+let requestId = 0;
+
+// served by the local server (server.py) and by the deployed function
+const API_ENDPOINT = "/api/run";
 
 /* ------------------------------------------------------------------ */
 /* colour scales                                                       */
@@ -737,18 +740,6 @@ function render(payload) {
     `${payload.config.seq_len} tokens · embed ${payload.config.embed_dim} · hidden ${payload.config.hidden_dim}`;
 }
 
-async function fetchPayload(params) {
-  let response = await fetch(state.apiEndpoint + "?" + params.toString());
-  // static host without the /api/run redirect -> talk to the function directly
-  if (response.status === 404 && state.apiEndpoint !== NETLIFY_ENDPOINT) {
-    state.apiEndpoint = NETLIFY_ENDPOINT;
-    response = await fetch(state.apiEndpoint + "?" + params.toString());
-  }
-  return response;
-}
-
-let requestId = 0;
-
 async function run() {
   const btn = $("run-btn");
   btn.disabled = true;
@@ -763,7 +754,7 @@ async function run() {
   });
   const started = performance.now();
   try {
-    const response = await fetchPayload(params);
+    const response = await fetch(API_ENDPOINT + "?" + params.toString());
     const data = await response.json().catch(() => null);
     if (!data) {
       throw new Error(

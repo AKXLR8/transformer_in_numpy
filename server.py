@@ -10,7 +10,6 @@ import argparse
 import json
 import os
 import sys
-import traceback
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -20,22 +19,7 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 sys.path.insert(0, BASE_DIR)
 
-from transformer import TransformerPipeline  # noqa: E402
-
-DEFAULT_TEXT = "akshay is running the dog is barking"
-
-MAX_TEXT_LENGTH = 500
-
-
-def build_payload(text, embed_dim, hidden_dim, max_seq_len, seed):
-    pipeline = TransformerPipeline(
-        text=text,
-        embed_dim=embed_dim,
-        hidden_dim=hidden_dim,
-        max_seq_len=max_seq_len,
-        seed=seed,
-    )
-    return pipeline.run()
+from transformer_api import handle_params  # noqa: E402
 
 
 class VisualizerHandler(SimpleHTTPRequestHandler):
@@ -59,59 +43,14 @@ class VisualizerHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def handle_api_run(self, parsed):
-        query = parse_qs(parsed.query)
-
-        if "text" in query:
-            text = (query.get("text", [""])[0] or "").strip()
-            if not text:
-                self.send_json(
-                    {
-                        "error": "Enter at least one word to visualise. "
-                        "The input produced no word tokens."
-                    },
-                    400,
-                )
-                return
-        else:
-            text = DEFAULT_TEXT
-        text_truncated = len(text) > MAX_TEXT_LENGTH
-        text = text[:MAX_TEXT_LENGTH]
-
-        def as_int(name, default, low, high):
-            try:
-                value = int(query.get(name, [default])[0])
-            except (TypeError, ValueError):
-                return default
-            return max(low, min(high, value))
-
-        embed_dim = as_int("embed_dim", 8, 2, 64)
-        hidden_dim = as_int("hidden_dim", 32, 2, 256)
-        max_seq_len = as_int("max_seq_len", 32, 4, 256)
-        seed = as_int("seed", 0, 0, 10_000)
-
-        try:
-            payload = build_payload(
-                text, embed_dim, hidden_dim, max_seq_len, seed
-            )
-        except Exception:
-            traceback.print_exc()
-            self.send_json(
-                {"error": "Failed to run the transformer block."}, 500
-            )
-            return
-
-        if not payload["tokens"]:
-            self.send_json(
-                {
-                    "error": "No word tokens found in the input. "
-                    "Enter at least one word."
-                },
-                400,
-            )
-            return
-
-        payload["text_truncated"] = text_truncated
-        self.send_json(payload, 200)
+        query = {
+            key: values[0]
+            for key, values in parse_qs(
+                parsed.query, keep_blank_values=True
+            ).items()
+        }
+        status, body = handle_params(query)
+        self.send_json(body, status)
 
     def send_json(self, data, status=200):
         body = json.dumps(data).encode("utf-8")
