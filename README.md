@@ -31,7 +31,7 @@ Type a sentence, hit run, and watch the numbers move. Nothing is mocked up — t
 git clone https://github.com/AKXLR8/transformer_in_numpy.git
 cd transformer_in_numpy
 pip install numpy
-python server.py
+python dev_server.py
 ```
 
 Open **http://127.0.0.1:8000** and you're in.
@@ -43,14 +43,14 @@ python -m venv venv
 venv\Scripts\activate        # Windows
 source venv/bin/activate     # macOS / Linux
 pip install -r requirements.txt
-python server.py
+python dev_server.py
 ```
 
-The server is standard library only — no Flask, no uvicorn, no `pip install` gymnastics. `server.py` is about 120 lines and it runs on whatever Python 3.9+ you have lying around.
+The server is standard library only — no Flask, no uvicorn, no `pip install` gymnastics. `dev_server.py` is about 120 lines and it runs on whatever Python 3.9+ you have lying around.
 
 ```bash
-python server.py --port 9000      # different port
-python server.py --host 0.0.0.0   # expose it on your LAN
+python dev_server.py --port 9000      # different port
+python dev_server.py --host 0.0.0.0   # expose it on your LAN
 ```
 
 ---
@@ -60,7 +60,7 @@ python server.py --host 0.0.0.0   # expose it on your LAN
 ```mermaid
 flowchart LR
     U["🖥️ Browser<br/><i>static/index.html</i>"] -->|"fetch /api/run<br/>?text=...&amp;embed_dim=8"| S{"Where is it running?"}
-    S -->|"local dev"| L["server.py<br/><i>http.server + ThreadingHTTPServer</i>"]
+    S -->|"local dev"| L["dev_server.py<br/><i>http.server + ThreadingHTTPServer</i>"]
     S -->|"Vercel"| F["api/run.py<br/><i>Python function on Vercel</i>"]
     L --> P["transformer_api.handle_params()"]
     F --> P
@@ -212,6 +212,18 @@ version had two copies of the request logic and they *did* drift — one of them
 threw a `NameError` on every request in production while the local one was
 fine. Now there's only one copy.)
 
+> **Why is the local server called `dev_server.py` and not `server.py`?**
+> Vercel treats `server.py` (along with `app.py`, `index.py`, `main.py`,
+> `wsgi.py` and `asgi.py`) at the repo root as a Python entrypoint, and it
+> would try to serve the whole site from that file instead of using
+> `api/run.py`. Renaming sidesteps it. If you'd rather keep the name, add a
+> `pyproject.toml` with:
+>
+> ```toml
+> [tool.vercel]
+> entrypoint = "api.run:handler"
+> ```
+
 **One heads-up:** Netlify was the original plan, but Netlify Functions only
 support TypeScript, JavaScript and Go — there's no Python runtime there at
 all. Vercel runs Python natively, so the block stays in Python, which is the
@@ -263,7 +275,7 @@ Things that might trip you up if you don't know about them:
 ```
 transformer.py                 the block, in pure NumPy (342 lines)
 transformer_api.py             shared request handling (78 lines)
-server.py                      stdlib HTTP server for local dev (117 lines)
+dev_server.py                 stdlib HTTP server for local dev (122 lines)
 api/run.py                     the deployed function: /api/run (50 lines)
 vercel.json                    output dir + function config
 requirements.txt               numpy

@@ -2,8 +2,12 @@
 
 Standard library only - no pip installs required.
 
-    python server.py            # http://127.0.0.1:8000
-    python server.py --port 9000
+    python dev_server.py            # http://127.0.0.1:8000
+    python dev_server.py --port 9000
+
+The file is called dev_server.py rather than server.py on purpose: Vercel
+treats server.py at the repo root as a Python entrypoint, and we want it to
+use the function in api/run.py instead.
 """
 
 import argparse

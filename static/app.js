@@ -18,7 +18,7 @@ const state = {
 // guards against out of order responses when several requests overlap
 let requestId = 0;
 
-// served by the local server (server.py) and by the deployed function
+// served by the local server (dev_server.py) and by the deployed function
 const API_ENDPOINT = "/api/run";
 
 /* ------------------------------------------------------------------ */
