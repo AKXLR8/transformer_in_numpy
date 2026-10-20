@@ -212,17 +212,27 @@ version had two copies of the request logic and they *did* drift — one of them
 threw a `NameError` on every request in production while the local one was
 fine. Now there's only one copy.)
 
-> **Why is the local server called `dev_server.py` and not `server.py`?**
-> Vercel treats `server.py` (along with `app.py`, `index.py`, `main.py`,
-> `wsgi.py` and `asgi.py`) at the repo root as a Python entrypoint, and it
-> would try to serve the whole site from that file instead of using
-> `api/run.py`. Renaming sidesteps it. If you'd rather keep the name, add a
-> `pyproject.toml` with:
+> **Why the `pyproject.toml`?**
+> Vercel looks for a Python entrypoint in `app.py`, `index.py`, `server.py`,
+> `main.py`, `wsgi.py` or `asgi.py` at the repo root (or in `src/`, `app/`,
+> `api/`). None of those exist here, so it has to be told where the function
+> lives:
 >
 > ```toml
 > [tool.vercel]
 > entrypoint = "api.run:handler"
 > ```
+>
+> That's also why the local dev server is called `dev_server.py` rather than
+> `server.py` — a root `server.py` gets picked up as the entrypoint, and
+> Vercel would try to serve the whole site from it.
+>
+> **One manifest, not two.** Vercel's `uv` installer prefers `pyproject.toml`
+> over `requirements.txt`, and if `pyproject.toml` doesn't list the
+> dependencies then *nothing gets installed* and the function dies at runtime
+> with `No module named numpy` (vercel/vercel#14041). So `pyproject.toml`
+> lists numpy, `uv.lock` pins it, and `requirements.txt` stays around for
+> local development. Committing the lockfile keeps the build reproducible.
 
 **One heads-up:** Netlify was the original plan, but Netlify Functions only
 support TypeScript, JavaScript and Go — there's no Python runtime there at
@@ -275,10 +285,13 @@ Things that might trip you up if you don't know about them:
 ```
 transformer.py                 the block, in pure NumPy (342 lines)
 transformer_api.py             shared request handling (78 lines)
-dev_server.py                 stdlib HTTP server for local dev (122 lines)
+dev_server.py                  stdlib HTTP server for local dev (122 lines)
 api/run.py                     the deployed function: /api/run (50 lines)
+api/__init__.py                makes api.run importable as a module
+pyproject.toml                 entrypoint + dependencies for Vercel
+uv.lock                        pinned dependency versions
 vercel.json                    output dir + function config
-requirements.txt               numpy
+requirements.txt               numpy (local dev)
 .python-version                3.12
 static/
   index.html                   the page

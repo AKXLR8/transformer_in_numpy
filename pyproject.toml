@@ -1,0 +1,21 @@
+[project]
+name = "transformer-visualizer"
+version = "0.1.0"
+description = "A transformer block built from scratch in NumPy, with a live visualizer"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.26,<3.0",
+]
+
+# Vercel needs to be told where the function lives, because the default
+# entrypoint names (app.py, index.py, server.py, ...) are not used here.
+[tool.vercel]
+entrypoint = "api.run:handler"
+
+# this project is an application, not an installable package
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = []
