@@ -124,7 +124,39 @@ class TestFunction(unittest.TestCase):
 
 
 class TestVercelHandler(unittest.TestCase):
-    """The class Vercel loads: api/run.py -> handler(BaseHTTPRequestHandler)."""
+    """The class Vercel loads: api/run.py -> handler(BaseHTTPRequestHandler).
+
+    Vercel routes every request to this one function, so it has to serve the
+    API *and* the static site.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import threading
+        from http.server import ThreadingHTTPServer
+
+        cls.original_log = run_fn.handler.log_message
+        run_fn.handler.log_message = lambda *a, **k: None
+        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), run_fn.handler)
+        cls.port = cls.server.server_address[1]
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+        cls.base = f"http://127.0.0.1:{cls.port}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        run_fn.handler.log_message = cls.original_log
+
+    def get(self, path):
+        import urllib.error
+        import urllib.request
+
+        try:
+            with urllib.request.urlopen(self.base + path, timeout=10) as r:
+                return r.status, r.headers.get("Content-Type"), r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.headers.get("Content-Type"), e.read()
 
     def test_handler_class_exists_and_has_the_right_shape(self):
         self.assertTrue(hasattr(run_fn, "handler"))
@@ -133,51 +165,51 @@ class TestVercelHandler(unittest.TestCase):
             run_fn.handler.__mro__[1].__name__, "BaseHTTPRequestHandler"
         )
 
-    def test_handler_serves_the_api_route(self):
-        import io
-        from http.server import BaseHTTPRequestHandler
+    def test_api_route_returns_json(self):
+        status, content_type, body = self.get("/api/run?text=hello%20world")
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", content_type)
+        self.assertEqual(json.loads(body)["tokens"], ["hello", "world"])
 
-        captured = {}
+    def test_root_serves_the_site(self):
+        status, content_type, body = self.get("/")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", content_type)
+        self.assertIn(b"<title>", body)
 
-        class FakeSocket:
-            def makefile(self, *args, **kwargs):
-                return io.BytesIO()
+    def test_static_assets_are_served_with_the_right_types(self):
+        status, content_type, body = self.get("/app.js")
+        self.assertEqual(status, 200)
+        self.assertIn("javascript", content_type)
+        self.assertGreater(len(body), 1000)
 
-        original = run_fn.handler.log_message
-        run_fn.handler.log_message = lambda *a, **k: None
-        try:
-            request = run_fn.handler.__new__(run_fn.handler)
-            request.path = "/api/run?text=hello%20world"
-            request.command = "GET"
-            request.requestline = "GET /api/run?text=hello%20world"
-            request.client_address = ("127.0.0.1", 1234)
-            request.server = None
-            request.close_connection = True
-            request.wfile = io.BytesIO()
+        status, content_type, body = self.get("/styles.css")
+        self.assertEqual(status, 200)
+        self.assertIn("text/css", content_type)
 
-            def send_response(code, message=None):
-                captured["status"] = code
+    def test_missing_file_is_404(self):
+        status, _, _ = self.get("/nope.txt")
+        self.assertEqual(status, 404)
 
-            def send_header(key, value):
-                captured.setdefault("headers", {})[key] = value
+    def test_path_traversal_is_blocked(self):
+        status, _, _ = self.get("/../transformer.py")
+        self.assertEqual(status, 404)
 
-            def end_headers():
-                captured["ended"] = True
+    def test_root_with_api_parameters_returns_json(self):
+        # the front end always sends the tuning parameters, so a request that
+        # lands on "/" with them is an API call
+        status, content_type, body = self.get(
+            "/?text=hello&embed_dim=8&hidden_dim=32&max_seq_len=32&seed=0"
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", content_type)
+        self.assertEqual(json.loads(body)["tokens"], ["hello"])
 
-            request.send_response = send_response
-            request.send_header = send_header
-            request.end_headers = end_headers
-            request.send_error = lambda *a, **k: captured.update(status=404)
-
-            run_fn.handler.do_GET(request)
-        finally:
-            run_fn.handler.log_message = original
-
-        self.assertEqual(captured.get("status"), 200)
-        body = json.loads(request.wfile.getvalue().decode("utf-8"))
-        self.assertEqual(body["tokens"], ["hello", "world"])
-        self.assertEqual(captured["headers"]["Content-Type"], "application/json")
-        del BaseHTTPRequestHandler
+    def test_root_with_only_text_serves_the_page(self):
+        # the shareable url format is /?text=... - that must stay a page
+        status, content_type, _ = self.get("/?text=hello")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", content_type)
 
 
 if __name__ == "__main__":

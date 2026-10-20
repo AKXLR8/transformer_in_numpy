@@ -3,7 +3,7 @@
   "outputDirectory": "static",
   "functions": {
     "api/run.py": {
-      "excludeFiles": "{tests/**,venv/**,.git/**,static/**,README.md}"
+      "excludeFiles": "{tests/**,venv/**,.git/**,README.md}"
     }
   }
 }

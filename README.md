@@ -201,10 +201,14 @@ vercel --prod     # production
 
 | Piece | Where it lives |
 |---|---|
-| `api/run.py` | the Vercel function, serves `/api/run` |
+| `api/run.py` | the Vercel function — serves `/api/run` *and* the static files |
 | `transformer_api.py` | shared request handling used by *both* entry points |
-| `static/` | the UI, served as static files |
+| `static/` | the UI, served by the function from the bundle |
 | `transformer.py` | the numpy block — bundled with the function, imported by it |
+
+With a single Python entrypoint, Vercel routes **every** request to that one
+function, so `api/run.py` serves the site as well as the API: `/api/run` gets
+the JSON payload, everything else falls through to the files in `static/`.
 
 Both the local server and the deployed function call the same
 `transformer_api.handle_params()`, so they can't drift apart. (An earlier
